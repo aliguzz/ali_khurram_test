@@ -1,7 +1,20 @@
-from flask import Flask, render_template, request, url_for, redirect, flash
+from flask import Flask, render_template, request, url_for, redirect, json
+from flask_mysqldb import MySQL
+import time
+import LRUCache
+LRUCacheObj = LRUCache.LRUCache(10, 20)
+
 app = Flask(__name__)
+# db configurations
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.run(debug=True)
+app.config['MYSQL_HOST'] =  'localhost'
+app.config['MYSQL_PORT'] =  3306
+app.config['MYSQL_USER'] =  'root'
+app.config['MYSQL_PASSWORD'] =  'Aliguzz1@3'
+app.config['MYSQL_DB'] =  'ali_khurram_test'
+mysql = MySQL(app)
+# mysql.init_app(app)
+# cursor = mysql.connection.cursor()
 
 @app.route("/")
 def home():
@@ -83,3 +96,45 @@ def q2():
             return render_template('q2.html', error=error)
     else:
         return render_template('q2.html')
+
+# function to calculate the results of questions number 1
+@app.route("/q3", methods=["GET"])
+def q3():
+    # store start time
+    start = time.time()
+    results = ""
+    message = ""
+    exec_time = ""
+    # check if search term provided
+    if request.args and request.args["query"]:
+        query = str(request.args["query"])
+        searched_in = 'DATABASE'
+        # check if its in cache
+        cache_results = LRUCacheObj.get(query)
+        if cache_results != -1:
+            users = cache_results
+            searched_in = 'CACHE'
+        else:
+            cursor = mysql.connection.cursor()
+            cursor.execute("SELECT emp_no, first_name, last_name, birth_date, hire_date FROM employees WHERE CONCAT(first_name, ' ', last_name) LIKE '%"+query+"%' OR birth_date LIKE '%"+query+"%' OR hire_date LIKE '%"+query+"%' OR emp_no LIKE '%"+query+"%'")
+            users = cursor.fetchall()
+        
+        LRUCacheObj.set(query, users)
+        # check for results
+        if len(users) > 0:
+            message = str(len(users))+" results against your search"
+        else:
+            message = "No results found against your search"
+        
+        # get end time of execution
+        stop = time.time()
+        total_time = stop - start
+        exec_time = float(total_time)
+        exec_time = "{:.15f}".format(exec_time)
+        return render_template("q3.html", results=users,message=message,exec_time=exec_time,searched_in=searched_in)
+    else:
+        return render_template("q3.html", results=results)
+
+# app debug mode
+if __name__ == '__main__':
+    app.run(debug=True)
